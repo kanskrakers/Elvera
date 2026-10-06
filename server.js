@@ -4,6 +4,7 @@
 
 import express from "express";
 import Retell from "retell-sdk";
+import nodemailer from "nodemailer";
 
 const app = express();
 app.use(express.json());
@@ -189,6 +190,105 @@ app.post("/retell/verify_address", verifyRetell, async (req, res) => {
   } catch (e) {
     console.error("verify_address", e.message);
     res.json({ resultaat: "fout" });
+  }
+});
+
+// ---------- Function 3: send_cancel_link_email ----------
+// Mailt de opzeglink naar het e-mailadres dat OP DE ORDER staat (nooit naar een
+// adres dat de beller noemt). Verstuurt via Zoho Mail (SMTP, app-wachtwoord).
+const {
+  ZOHO_SMTP_HOST = "smtp.zoho.eu",
+  ZOHO_SMTP_USER,
+  ZOHO_SMTP_PASS,
+  MAIL_BRAND = "Elvéra",
+  CANCEL_LINK_URL,
+} = process.env;
+
+const mailer = nodemailer.createTransport({
+  host: ZOHO_SMTP_HOST,
+  port: 465,
+  secure: true,
+  auth: { user: ZOHO_SMTP_USER, pass: ZOHO_SMTP_PASS },
+  connectionTimeout: 5000,
+  greetingTimeout: 5000,
+  socketTimeout: 8000,
+});
+
+// Max 2 opzegmails per gesprek
+const mailsSent = new Map();
+function tooManyMails(callId) {
+  return (mailsSent.get(callId) || 0) >= 2;
+}
+function registerMail(callId) {
+  mailsSent.set(callId, (mailsSent.get(callId) || 0) + 1);
+  setTimeout(() => mailsSent.delete(callId), 60 * 60 * 1000);
+}
+
+function cancelMail(to) {
+  const text = [
+    "Hello,",
+    "",
+    `Thank you for calling ${MAIL_BRAND}. As discussed on the phone, here is the link to cancel your subscription:`,
+    "",
+    CANCEL_LINK_URL,
+    "",
+    "Open the link and enter the email address you ordered with. You can then cancel your subscription.",
+    "Please cancel at least 24 hours before your next payment date, so your next order isn't sent.",
+    "",
+    "If you have any questions, just reply to this email.",
+    "",
+    "Kind regards,",
+    `The ${MAIL_BRAND} team`,
+  ].join("\n");
+
+  const html = `<p>Hello,</p>
+<p>Thank you for calling ${MAIL_BRAND}. As discussed on the phone, here is the link to cancel your subscription:</p>
+<p><a href="${CANCEL_LINK_URL}">Cancel my subscription</a></p>
+<p>Open the link and enter the email address you ordered with. You can then cancel your subscription.<br>
+Please cancel at least 24 hours before your next payment date, so your next order isn't sent.</p>
+<p>If you have any questions, just reply to this email.</p>
+<p>Kind regards,<br>The ${MAIL_BRAND} team</p>`;
+
+  return {
+    from: `"${MAIL_BRAND}" <${ZOHO_SMTP_USER}>`,
+    replyTo: ZOHO_SMTP_USER,
+    to,
+    subject: `Your link to cancel your ${MAIL_BRAND} subscription`,
+    text,
+    html,
+  };
+}
+
+app.post("/retell/send_cancel_link_email", verifyRetell, async (req, res) => {
+  const { call, args, store } = parse(req);
+  try {
+    if (!ZOHO_SMTP_USER || !ZOHO_SMTP_PASS || !CANCEL_LINK_URL) {
+      console.error("send_cancel_link_email: ZOHO_SMTP_USER, ZOHO_SMTP_PASS of CANCEL_LINK_URL ontbreekt");
+      return res.json({ resultaat: "fout", instructie: "Log het opzegverzoek voor het team (cancel_by_team)." });
+    }
+    if (tooManyAttempts(call.call_id)) {
+      return res.json({ resultaat: "te_veel_pogingen", instructie: "Verwijs de klant naar e-mailsupport." });
+    }
+    if (tooManyMails(call.call_id)) {
+      return res.json({ resultaat: "al_verstuurd", instructie: "De mail is al twee keer verstuurd. Laat het team het opzeggen overnemen." });
+    }
+    const order = await findOrder(store, args.order_number);
+    if (!order || !isVerified(order, args, call.from_number)) {
+      registerFail(call.call_id);
+      return res.json({ resultaat: "niet_geverifieerd", instructie: "Vraag de klant het ordernummer en e-mailadres of postcode te controleren." });
+    }
+    if (!order.email) {
+      return res.json({ resultaat: "geen_email", instructie: "Er staat geen e-mailadres op de order. Laat het team het opzeggen overnemen." });
+    }
+
+    await mailer.sendMail(cancelMail(order.email));
+    registerMail(call.call_id);
+    console.log(`send_cancel_link_email verstuurd voor order ${order.name}`);
+    // Het e-mailadres zelf gaat NIET terug naar de agent
+    res.json({ resultaat: "verstuurd" });
+  } catch (e) {
+    console.error("send_cancel_link_email", e.message);
+    res.json({ resultaat: "fout", instructie: "Excuseer je en log het opzegverzoek voor het team (cancel_by_team)." });
   }
 });
 
