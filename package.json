@@ -6,6 +6,7 @@
   "scripts": { "start": "node server.js" },
   "dependencies": {
     "express": "^4.19.2",
+    "nodemailer": "^6.9.14",
     "retell-sdk": "^4.0.0"
   }
 }
