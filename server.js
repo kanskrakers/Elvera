@@ -234,7 +234,7 @@ app.post("/retell/lookup_order", verifyRetell, async (req, res) => {
     });
   } catch (e) {
     console.error("lookup_order", e.message);
-    res.json({ resultaat: "fout", instructie: "Excuseer je en bied aan dat het team per e-mail terugkomt." });
+    res.json({ resultaat: "fout", instructie: "Excuseer je. Verwijs naar de trackinglink in de verzendmail, of laat de klant zelf mailen naar het supportadres met het ordernummer. Beloof geen actie van het team." });
   }
 });
 
@@ -298,12 +298,11 @@ function cancelMail(to) {
     "",
     CANCEL_LINK_URL,
     "",
-    "Open the link and enter the email address you ordered with.",
-    "In your customer portal you can move your next delivery, change how often it comes, pause, update your address or payment details, or cancel your subscription.",
+    "Open the link and enter the email address you ordered with. In your customer portal you can manage your subscription:",
+    "move or skip your next delivery, change how often it comes, pause it, update your address or payment details, or cancel.",
+    "Please make any change at least 24 hours before your next payment date. You'll see that date in the portal.",
     "",
-    "Please make any changes at least 24 hours before your next payment date. You'll see that date in the portal.",
-    "",
-    "If anything doesn't work, just reply to this email and we'll sort it for you.",
+    "If anything doesn't work, just reply to this email and our team will help you.",
     "",
     "Kind regards,",
     `The ${MAIL_BRAND} team`,
@@ -311,19 +310,18 @@ function cancelMail(to) {
 
   const html = `<p>Hello,</p>
 <p>Thank you for calling ${MAIL_BRAND}. As discussed on the phone, here is the link to your customer portal:</p>
-<p><a href="${CANCEL_LINK_URL}"><strong>Open my customer portal</strong></a></p>
-<p>Or copy this link into your browser:<br>
-<a href="${CANCEL_LINK_URL}">${CANCEL_LINK_URL}</a></p>
-<p>Open the link and enter the email address you ordered with. In your customer portal you can move your next delivery, change how often it comes, pause, update your address or payment details, or cancel your subscription.</p>
-<p>Please make any changes at least 24 hours before your next payment date. You'll see that date in the portal.</p>
-<p>If anything doesn't work, just reply to this email and we'll sort it for you.</p>
+<p><a href="${CANCEL_LINK_URL}">Open my customer portal</a></p>
+<p>Open the link and enter the email address you ordered with. In your customer portal you can manage your subscription:
+move or skip your next delivery, change how often it comes, pause it, update your address or payment details, or cancel.<br>
+Please make any change at least 24 hours before your next payment date. You'll see that date in the portal.</p>
+<p>If anything doesn't work, just reply to this email and our team will help you.</p>
 <p>Kind regards,<br>The ${MAIL_BRAND} team</p>`;
 
   return {
     from: `"${MAIL_BRAND}" <${ZOHO_SMTP_USER}>`,
     replyTo: ZOHO_SMTP_USER,
     to,
-    subject: `Your ${MAIL_BRAND} customer portal link`,
+    subject: `Your ${MAIL_BRAND} customer portal`,
     text,
     html,
   };
@@ -334,13 +332,13 @@ app.post("/retell/send_cancel_link_email", verifyRetell, async (req, res) => {
   try {
     if (!ZOHO_SMTP_USER || !ZOHO_SMTP_PASS || !CANCEL_LINK_URL) {
       console.error("send_cancel_link_email: ZOHO_SMTP_USER, ZOHO_SMTP_PASS of CANCEL_LINK_URL ontbreekt");
-      return res.json({ resultaat: "fout", instructie: "Log het opzegverzoek voor het team (cancel_by_team)." });
+      return res.json({ resultaat: "fout", instructie: "Excuseer je. Geef de andere manieren: Manage Subscription onderaan de website, of laat de klant zelf mailen naar het supportadres. Beloof geen actie van het team." });
     }
     if (tooManyAttempts(call.call_id)) {
       return res.json({ resultaat: "te_veel_pogingen", instructie: "Verwijs de klant naar e-mailsupport." });
     }
     if (tooManyMails(call.call_id)) {
-      return res.json({ resultaat: "al_verstuurd", instructie: "De mail is al twee keer verstuurd. Laat het team het opzeggen overnemen." });
+      return res.json({ resultaat: "al_verstuurd", instructie: "De mail is al twee keer verstuurd. Vraag de klant in spam of ongewenst te kijken. Geef de andere manieren: Manage Subscription onderaan de website, of laat de klant zelf mailen naar het supportadres. Beloof geen actie van het team." });
     }
     const order = await findOrder(store, args.order_number);
     if (!order || !isVerified(order, args, call.from_number)) {
@@ -348,7 +346,7 @@ app.post("/retell/send_cancel_link_email", verifyRetell, async (req, res) => {
       return res.json({ resultaat: "niet_geverifieerd", instructie: "Vraag de klant het ordernummer en e-mailadres of postcode te controleren." });
     }
     if (!order.email) {
-      return res.json({ resultaat: "geen_email", instructie: "Er staat geen e-mailadres op de order. Laat het team het opzeggen overnemen." });
+      return res.json({ resultaat: "geen_email", instructie: "Er staat geen e-mailadres op de order. Geef de andere manieren: Manage Subscription onderaan de website, of laat de klant zelf mailen naar het supportadres. Beloof geen actie van het team." });
     }
 
     await mailer.sendMail(cancelMail(order.email));
@@ -358,7 +356,7 @@ app.post("/retell/send_cancel_link_email", verifyRetell, async (req, res) => {
     res.json({ resultaat: "verstuurd" });
   } catch (e) {
     console.error("send_cancel_link_email", e.message);
-    res.json({ resultaat: "fout", instructie: "Excuseer je en log het opzegverzoek voor het team (cancel_by_team)." });
+    res.json({ resultaat: "fout", instructie: "Excuseer je, de mail kon niet worden verstuurd. Geef de andere manieren: Manage Subscription onderaan de website, of laat de klant zelf mailen naar het supportadres. Beloof geen actie van het team." });
   }
 });
 
