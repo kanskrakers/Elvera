@@ -294,32 +294,36 @@ function cancelMail(to) {
   const text = [
     "Hello,",
     "",
-    `Thank you for calling ${MAIL_BRAND}. As discussed on the phone, here is the link to cancel your subscription:`,
+    `Thank you for calling ${MAIL_BRAND}. As discussed on the phone, here is the link to your customer portal:`,
     "",
     CANCEL_LINK_URL,
     "",
-    "Open the link and enter the email address you ordered with. You can then cancel your subscription.",
-    "Please cancel at least 24 hours before your next payment date, so your next order isn't sent.",
+    "Open the link and enter the email address you ordered with.",
+    "In your customer portal you can move your next delivery, change how often it comes, pause, update your address or payment details, or cancel your subscription.",
     "",
-    "If you have any questions, just reply to this email.",
+    "Please make any changes at least 24 hours before your next payment date. You'll see that date in the portal.",
+    "",
+    "If anything doesn't work, just reply to this email and we'll sort it for you.",
     "",
     "Kind regards,",
     `The ${MAIL_BRAND} team`,
   ].join("\n");
 
   const html = `<p>Hello,</p>
-<p>Thank you for calling ${MAIL_BRAND}. As discussed on the phone, here is the link to cancel your subscription:</p>
-<p><a href="${CANCEL_LINK_URL}">Cancel my subscription</a></p>
-<p>Open the link and enter the email address you ordered with. You can then cancel your subscription.<br>
-Please cancel at least 24 hours before your next payment date, so your next order isn't sent.</p>
-<p>If you have any questions, just reply to this email.</p>
+<p>Thank you for calling ${MAIL_BRAND}. As discussed on the phone, here is the link to your customer portal:</p>
+<p><a href="${CANCEL_LINK_URL}"><strong>Open my customer portal</strong></a></p>
+<p>Or copy this link into your browser:<br>
+<a href="${CANCEL_LINK_URL}">${CANCEL_LINK_URL}</a></p>
+<p>Open the link and enter the email address you ordered with. In your customer portal you can move your next delivery, change how often it comes, pause, update your address or payment details, or cancel your subscription.</p>
+<p>Please make any changes at least 24 hours before your next payment date. You'll see that date in the portal.</p>
+<p>If anything doesn't work, just reply to this email and we'll sort it for you.</p>
 <p>Kind regards,<br>The ${MAIL_BRAND} team</p>`;
 
   return {
     from: `"${MAIL_BRAND}" <${ZOHO_SMTP_USER}>`,
     replyTo: ZOHO_SMTP_USER,
     to,
-    subject: `Your link to cancel your ${MAIL_BRAND} subscription`,
+    subject: `Your ${MAIL_BRAND} customer portal link`,
     text,
     html,
   };
