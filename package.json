@@ -1,12 +1,15 @@
 {
   "name": "myvio-order-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
     "express": "^4.19.2",
     "nodemailer": "^6.9.14",
-    "retell-sdk": "^4.0.0"
+    "retell-sdk": "^4.0.0",
+    "double-metaphone": "^2.0.1"
   }
 }
