@@ -483,20 +483,50 @@ const TODO = {
   mens_gevraagd: "De klant wilde een medewerker. Per mail contact opnemen.",
 };
 
+// Rode vlaggen (wens Elvéra, 8-11-2026). Retell vult "rode_vlaggen" met een of meer van deze sleutels.
+const RODE_VLAGGEN = {
+  bank: { label: "Bank of kaart (bank bellen, kaart blokkeren)", urgent: true },
+  dispute: { label: "Dispute, chargeback of PayPal-claim", urgent: true },
+  fraude: { label: "Fraude, scam, oplichting of diefstal", urgent: true },
+  toezicht_juridisch: { label: "Toezichthouder of jurist (Trading Standards, solicitor, lawyer, police, Citizens Advice, ombudsman, ASA)", urgent: true },
+  herhaling: { label: "Herhaling (al opgezegd, vaker gevraagd, niemand reageert)", urgent: true },
+  dwingend: { label: "Dwingend (cancel now, stop charging me)", urgent: false },
+  reputatie: { label: "Reputatie (Trustpilot, review, Facebook, report you)", urgent: false },
+  privacy: { label: "Privacy (delete my data, GDPR) – wettelijke termijn: binnen één maand reageren", urgent: false },
+  kwetsbaar: { label: "Kwetsbare klant (overlijden, dementie, verward, kan het niet betalen)", urgent: false },
+  toon: { label: "Toon (schelden, stemverheffing, huilen, steeds onderbreken, ophangen)", urgent: false },
+};
+
+function parseFlags(d = {}) {
+  const raw = Array.isArray(d.rode_vlaggen) ? d.rode_vlaggen.join(",") : String(d.rode_vlaggen || "");
+  const keys = raw.toLowerCase().split(/[^a-z_]+/).filter((k) => RODE_VLAGGEN[k]);
+  if (yes(d.chargeback_signaal) && !keys.some((k) => RODE_VLAGGEN[k].urgent)) keys.push("dispute");
+  return [...new Set(keys)];
+}
+
+// Urgent bij een financieel/juridisch signaal of herhaling; toon versterkt elke andere rode vlag
+function isUrgent(flags) {
+  return flags.some((k) => RODE_VLAGGEN[k].urgent) || (flags.includes("toon") && flags.length > 1);
+}
+
 function ellaActieMail(call) {
   const a = call.call_analysis || {};
   const d = a.custom_analysis_data || {};
   const intent = String(d.intent || "").trim().toLowerCase() || "onbekend";
-  const chargeback = yes(d.chargeback_signaal);
+  const flags = parseFlags(d);
+  const chargeback = isUrgent(flags);
   const remembered = verifiedOrders.get(call.call_id);
   const orderNr = remembered?.name || (d.ordernummer ? `#${String(d.ordernummer).replace(/^#/, "")}` : null);
   const linkSent = (mailsSent.get(call.call_id) || 0) > 0 || yes(d.portal_link_verstuurd);
   const start = call.start_timestamp ? new Date(call.start_timestamp) : null;
   const duur = call.start_timestamp && call.end_timestamp ? Math.round((call.end_timestamp - call.start_timestamp) / 1000) : null;
 
-  const subject = `${chargeback ? "URGENT | " : ""}ELLA-ACTIE | ${intent} | ${orderNr || "geen ordernummer"}`;
+  const subject = `${chargeback ? "URGENT | " : flags.length ? "RODE VLAG | " : ""}ELLA-ACTIE | ${intent} | ${orderNr || "geen ordernummer"}`;
   const lines = [
-    chargeback ? "URGENT: de beller noemde de bank, een chargeback, dispute, advocaat of iets vergelijkbaars. Ella heeft gezegd dat het team binnen één werkdag mailt om de afschrijving op te lossen." : null,
+    chargeback ? "URGENT: Ella heeft gezegd dat het team binnen één werkdag mailt. Met voorrang oppakken." : null,
+    flags.length ? `Rode vlaggen: ${flags.map((k) => RODE_VLAGGEN[k].label).join("; ")}` : null,
+    flags.includes("kwetsbaar") ? "Let op: mogelijk kwetsbare klant. Extra zorgvuldig en coulant reageren." : null,
+    flags.includes("privacy") ? "Let op: privacyverzoek (AVG/UK GDPR). Binnen één maand afhandelen en bevestigen." : null,
     `Te doen: ${chargeback ? "Met voorrang. " : ""}${TODO[intent] || "Gesprek beoordelen en de klant per mail antwoorden."}`,
     "",
     `Intent: ${intent}`,
@@ -530,7 +560,7 @@ function ellaActieMail(call) {
 function needsAction(call) {
   const d = call.call_analysis?.custom_analysis_data || {};
   const intent = String(d.intent || "").trim().toLowerCase();
-  return yes(d.chargeback_signaal) || yes(d.doorgezet_naar_team) || (intent && intent !== "overig");
+  return parseFlags(d).length > 0 || yes(d.doorgezet_naar_team) || (intent && intent !== "overig");
 }
 
 app.post("/retell/webhook", verifyRetell, async (req, res) => {
