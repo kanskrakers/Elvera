@@ -249,9 +249,13 @@ async function findVerifiedOrder(store, args, fromNumber) {
   return { order: null, via: null };
 }
 
+// Doorzetten (PASS ON) alleen bij opzeggen of een rode vlag; anders mailt de klant zelf (EMAIL US)
+const NO_LOOKUP_NEXT =
+  "Wil de beller opzeggen, of is er een rode vlag: vraag naam en postcode voor de samenvatting en zet het verzoek door naar het team (PASS ON). Anders: vraag de beller het team te mailen op info at get elvera dot com, met naam, postcode en de vraag (EMAIL US).";
+
 function failInstruction(callId) {
   if (tooManyAttempts(callId)) {
-    return "Niet opnieuw proberen. Vraag naam en postcode voor de samenvatting en zet het verzoek door naar het team.";
+    return `Niet opnieuw proberen. ${NO_LOOKUP_NEXT}`;
   }
   return "Vraag één keer de postcode en probeer opnieuw (ordernummer, achternaam en postcode). Zeg niet welk gegeven niet klopt.";
 }
@@ -326,7 +330,7 @@ app.post("/retell/lookup_order", verifyRetell, async (req, res) => {
     });
   } catch (e) {
     console.error("lookup_order", e.message);
-    res.json({ resultaat: "fout", instructie: "Excuseer je. Vraag naam en postcode voor de samenvatting en zet het verzoek door naar het team." });
+    res.json({ resultaat: "fout", instructie: `Excuseer je. ${NO_LOOKUP_NEXT}` });
   }
 });
 
@@ -468,8 +472,10 @@ app.post("/retell/send_cancel_link_email", verifyRetell, async (req, res) => {
 
 // ---------- ELLA-ACTIE: na het gesprek een mail naar het team ----------
 // Retell stuurt na elk gesprek het event "call_analyzed" met de post-call-analyse.
-// Heeft het gesprek een actie nodig, dan gaat er een mail naar ELLA_ACTIE_TO.
-const { ELLA_ACTIE_TO, ELLA_ACTIE_TRANSCRIPT = "false" } = process.env;
+// Alleen bij een opzegging, een rode vlag (boos, bank, chargeback enz.) of als Ella zei dat ze het
+// doorzette, gaat er een mail naar ELLA_ACTIE_TO (wens Elvéra, 14-11-2026). Pakketvragen e.d. niet.
+const { ELLA_ACTIE_TO, ELLA_ACTIE_TRANSCRIPT = "false", ACTIE_INTENTS = "opzeggen,niet_besteld" } = process.env;
+const MAIL_INTENTS = new Set(ACTIE_INTENTS.toLowerCase().split(/[\s,]+/).filter(Boolean));
 
 const handledCalls = new Map(); // call_id -> tijd (Retell kan een webhook dubbel sturen)
 const yes = (v) => v === true || /^(true|yes|ja|y|1)$/i.test(String(v ?? "").trim());
@@ -557,10 +563,12 @@ function ellaActieMail(call) {
   };
 }
 
+// Mail alleen bij: opzeggen (of "nooit besteld"), een rode vlag, of als Ella de beller beloofde
+// dat het team mailt (doorgezet_naar_team), zodat er nooit een belofte openstaat.
 function needsAction(call) {
   const d = call.call_analysis?.custom_analysis_data || {};
   const intent = String(d.intent || "").trim().toLowerCase();
-  return parseFlags(d).length > 0 || yes(d.doorgezet_naar_team) || (intent && intent !== "overig");
+  return MAIL_INTENTS.has(intent) || parseFlags(d).length > 0 || yes(d.doorgezet_naar_team);
 }
 
 app.post("/retell/webhook", verifyRetell, async (req, res) => {
