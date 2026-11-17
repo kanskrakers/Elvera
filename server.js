@@ -533,7 +533,7 @@ function ellaActieMail(call) {
     flags.length ? `Rode vlaggen: ${flags.map((k) => RODE_VLAGGEN[k].label).join("; ")}` : null,
     flags.includes("kwetsbaar") ? "Let op: mogelijk kwetsbare klant. Extra zorgvuldig en coulant reageren." : null,
     flags.includes("privacy") ? "Let op: privacyverzoek (AVG/UK GDPR). Binnen één maand afhandelen en bevestigen." : null,
-    `Te doen: ${chargeback ? "Met voorrang. " : ""}${TODO[intent] || "Gesprek beoordelen en de klant per mail antwoorden."}`,
+    `Te doen: ${chargeback ? "Met voorrang. " : ""}${intent === "opzeggen" && kept(d) ? "Niet opzeggen: de beller houdt het abonnement. Het signaal beoordelen en de klant per mail antwoorden." : TODO[intent] || "Gesprek beoordelen en de klant per mail antwoorden."}`,
     "",
     `Intent: ${intent}`,
     `Ordernummer: ${orderNr || "onbekend"}`,
@@ -544,6 +544,7 @@ function ellaActieMail(call) {
     d.tracking_nummer ? `Trackingnummer (zoals verstaan): ${d.tracking_nummer}` : null,
     `Telefoon beller: ${call.from_number || "onbekend"}`,
     `Portal-link gemaild: ${linkSent ? "ja" : "nee"}`,
+    d.behoud ? `Behoud: ${{ behouden: "beller houdt het abonnement", opgezegd: "beller zegt op, ook na het voorstel", niet_aangeboden: "geen voorstel gedaan" }[String(d.behoud).trim().toLowerCase()] || d.behoud}` : null,
     `Opgelost in het gesprek: ${yes(d.opgelost_in_gesprek) ? "ja" : "nee"}`,
     "",
     `Samenvatting: ${d.samenvatting || a.call_summary || "geen samenvatting"}`,
@@ -565,10 +566,14 @@ function ellaActieMail(call) {
 
 // Mail alleen bij: opzeggen (of "nooit besteld"), een rode vlag, of als Ella de beller beloofde
 // dat het team mailt (doorgezet_naar_team), zodat er nooit een belofte openstaat.
+// Behoud (prompt v6.3): koos de beller in het gesprek toch voor houden (behoud = "behouden"),
+// dan is er niets op te zeggen en gaat er geen opzegmail uit.
+const kept = (d) => String(d.behoud || "").trim().toLowerCase() === "behouden";
 function needsAction(call) {
   const d = call.call_analysis?.custom_analysis_data || {};
   const intent = String(d.intent || "").trim().toLowerCase();
-  return MAIL_INTENTS.has(intent) || parseFlags(d).length > 0 || yes(d.doorgezet_naar_team);
+  const cancelIntent = MAIL_INTENTS.has(intent) && !(intent === "opzeggen" && kept(d));
+  return cancelIntent || parseFlags(d).length > 0 || yes(d.doorgezet_naar_team);
 }
 
 app.post("/retell/webhook", verifyRetell, async (req, res) => {
